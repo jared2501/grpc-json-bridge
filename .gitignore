@@ -1,0 +1,38 @@
+# Gradle
+*.class
+.gradle
+build/
+
+# SLSv2
+!*/service/bin
+**/var/data
+**/var/log
+
+# Eclipse
+.classpath
+.checkstyle
+.factorypath
+.project
+.settings
+bin/
+
+# Idea
+*.iml
+*.ipr
+*.iws
+.idea/
+out/
+generated_src/
+**/src/generated/
+
+# Codegen
+.generated
+
+# Mac
+.DS_Store
+
+docker-compose.yml
+
+# Vim
+*.swo
+*.swp
