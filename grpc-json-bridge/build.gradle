@@ -3,4 +3,7 @@ apply from: rootProject.file('gradle/java.gradle')
 dependencies {
     compile 'io.grpc:grpc-netty'
     compile 'io.grpc:grpc-services'
+
+    testCompile 'org.junit.jupiter:junit-jupiter-api'
+    testRuntime 'org.junit.jupiter:junit-jupiter-engine'
 }

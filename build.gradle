@@ -9,6 +9,7 @@ buildscript {
         classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
         classpath 'com.netflix.nebula:nebula-dependency-recommender:5.0.0'
         classpath 'com.palantir.baseline:gradle-baseline-java:0.18.0'
+        classpath 'com.palantir.configurationresolver:gradle-configuration-resolver-plugin:0.3.0'
         classpath 'gradle.plugin.org.inferred:gradle-processors:1.2.15'
     }
 }
@@ -22,6 +23,7 @@ dependencies {
 }
 
 allprojects {
+    apply plugin: 'com.palantir.configuration-resolver'
     apply plugin: 'nebula.dependency-recommender'
 
     repositories {
