@@ -5,3 +5,7 @@ apply plugin: 'com.palantir.baseline-eclipse'
 apply plugin: 'com.palantir.baseline-idea'
 apply plugin: 'org.inferred.processors'
 apply plugin: 'com.palantir.baseline-error-prone'
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs += ['-XepDisableWarningsInGeneratedCode', '-Werror']
+}

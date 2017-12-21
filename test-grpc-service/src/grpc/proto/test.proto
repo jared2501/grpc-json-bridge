@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package com.github.jared2501.grpc.bridge.test;
+
+option java_package = "com.github.jared2501.grpc.bridge.test";
+option java_multiple_files = true;
+
+message TestMessage {
+    string message = 1;
+}
+
+// A simple test service that will echo a TestMessage.
+service TestService {
+    // Takes a unary request and echos it back as a unary response
+    rpc UnaryReqUnaryResp (TestMessage) returns (TestMessage);
+    // Takes a unary request and echos it back a stream of size 1 (i.e. a unary response).
+    rpc UnaryReqStreamResp (TestMessage) returns (stream TestMessage);
+    // Takes a stream of requests and echos back the first request as a unary response.
+    rpc StreamReqUnaryResp (stream TestMessage) returns (TestMessage);
+    // Takes a stream of requests and echos each one back as a stream of responses.
+    rpc StreamReqStreamResp (stream TestMessage) returns (TestMessage);
+}

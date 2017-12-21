@@ -11,6 +11,7 @@ buildscript {
         classpath 'com.palantir.baseline:gradle-baseline-java:0.18.0'
         classpath 'com.palantir.configurationresolver:gradle-configuration-resolver-plugin:0.3.0'
         classpath 'gradle.plugin.org.inferred:gradle-processors:1.2.15'
+        classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.2'
     }
 }
 

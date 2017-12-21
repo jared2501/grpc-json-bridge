@@ -1,0 +1,65 @@
+apply plugin: 'com.google.protobuf'
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'com.palantir.baseline-idea'
+
+configurations {
+    grpcCompile
+    compile.extendsFrom grpcCompile
+}
+
+sourceSets {
+    grpc {
+        compileClasspath += configurations.grpcCompile
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java'
+        }
+    }
+    generateProtoTasks {
+        all().each { task ->
+            project.tasks.idea.dependsOn task
+            task.plugins {
+                grpc {
+                    option 'enable_deprecated=false'
+                }
+            }
+        }
+    }
+}
+
+idea {
+    module {
+        // Not using generatedSourceDirs because of
+        // https://discuss.gradle.org/t/support-for-intellij-2016/15294/8
+        sourceDirs += file("${projectDir}/build/generated/source/proto/grpc/java")
+        sourceDirs += file("${projectDir}/build/generated/source/proto/grpc/grpc")
+        excludeDirs = [file("${projectDir}/.gradle")]
+    }
+}
+
+afterEvaluate {
+    // Disable error prone for grpc source sets
+    if (project.plugins.hasPlugin('com.palantir.baseline-error-prone')) {
+        tasks.compileGrpcJava {
+            options.compilerArgs += ['-XepDisableAllChecks']
+        }
+    }
+}
+
+jar {
+    from sourceSets.grpc.output
+}
+
+dependencies {
+    compile sourceSets.grpc.output
+    grpcCompile 'io.grpc:grpc-protobuf'
+    grpcCompile 'io.grpc:grpc-stub'
+}
