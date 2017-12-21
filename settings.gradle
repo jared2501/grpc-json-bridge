@@ -1,3 +1,4 @@
 rootProject.name = 'grpc-json-bridge'
 
 include 'grpc-json-bridge'
+include 'test-grpc-service'

@@ -1,3 +1,6 @@
+com.google.protobuf:* = 3.5.0
 io.grpc:* = 1.7.1
+org.apiguardian:apiguardian-api = 1.0.0
 org.assertj:assertj-core = 3.6.2
 org.junit.jupiter:* = 5.0.2
+org.mockito:* = 2.13.0

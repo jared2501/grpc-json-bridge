@@ -28,12 +28,10 @@ jobs:
       - run: ./gradlew --parallel build
 
       - run:
-          command: |
-            mkdir -p ~/junit
-            find . -type f -regex ".*/build/.*TEST.*xml" -exec cp {} ~/junit/ \;
+          command: ./gradlew --parallel copyTestResults
           when: always
       - store_test_results:
-          path: ~/junit
+          path: /tmp/test-results/
 
       - persist_to_workspace:
           root: ./
