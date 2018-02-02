@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,26 +34,24 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
     private final String serviceName;
     private final ServerReflectionGrpc.ServerReflectionStub reflection;
 
-    private StreamObserver<ServerReflectionRequest> reqStream;
-
     public GrpcReflectionClientImpl(String serviceName, ServerReflectionGrpc.ServerReflectionStub reflection) {
         this.serviceName = serviceName;
         this.reflection = reflection;
     }
 
-    // TODO: thread safety?? caching??
     @Override
     public CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry() {
-        CompletableFuture<JsonFormat.TypeRegistry> future = new CompletableFuture<>();
+        CompletableFuture<JsonFormat.TypeRegistry> result = new CompletableFuture<>();
 
         Set<ServerReflectionRequest> outstandingRequests = Sets.newHashSet();
         Map<String, DescriptorProtos.FileDescriptorProto> protosByFileName = Maps.newHashMap();
 
-        reqStream = reflection.serverReflectionInfo(
+        AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream = new AtomicReference<>();
+        reqStream.set(reflection.serverReflectionInfo(
                 new StreamObserver<ServerReflectionResponse>() {
                     @Override
                     public void onNext(ServerReflectionResponse response) {
-                        if (future.isCancelled()) {
+                        if (result.isCancelled()) {
                             log.info("Future cancelled, not proceeding...");
                             return;
                         }
@@ -61,12 +60,18 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
 
                         switch (response.getMessageResponseCase()) {
                             case LIST_SERVICES_RESPONSE:
-                                requestAllFilesForServices(outstandingRequests, response);
+                                requestAllFilesForServices(reqStream, outstandingRequests, response);
+                                break;
                             case FILE_DESCRIPTOR_RESPONSE:
                                 requestUnseenDependencyProtos(
-                                        outstandingRequests, protosByFileName, response.getFileDescriptorResponse());
+                                        reqStream,
+                                        outstandingRequests,
+                                        protosByFileName,
+                                        response.getFileDescriptorResponse());
+                                break;
                             default:
                                 log.error("Unexpected response case: {}", response.getMessageResponseCase());
+                                break;
                         }
 
                         if (outstandingRequests.isEmpty()) {
@@ -75,7 +80,7 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
                             for (Descriptors.FileDescriptor compiledProto : compiledProtos) {
                                 typeRegistry.add(compiledProto.getMessageTypes());
                             }
-                            future.complete(typeRegistry.build());
+                            result.complete(typeRegistry.build());
                         }
                     }
 
@@ -90,26 +95,32 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
                     public void onCompleted() {
                         log.info("Reflection complete, service {} likely shutting down.", serviceName);
                     }
-                });
+                }));
 
         // List all services to initial a download
-        reqStream.onNext(ServerReflectionRequest.newBuilder()
+        reqStream.get().onNext(ServerReflectionRequest.newBuilder()
                 .setListServices("true")
                 .build());
 
-        return future;
+        return result;
     }
 
     private void requestAllFilesForServices(
-            Set<ServerReflectionRequest> outstandingRequests, ServerReflectionResponse response) {
+            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
+            Set<ServerReflectionRequest> outstandingRequests,
+            ServerReflectionResponse response) {
         for (ServiceResponse service : response.getListServicesResponse().getServiceList()) {
-            makeRequest(outstandingRequests, ServerReflectionRequest.newBuilder()
-                    .setFileContainingSymbol(service.getName())
-                    .build());
+            makeRequest(
+                    reqStream,
+                    outstandingRequests,
+                    ServerReflectionRequest.newBuilder()
+                            .setFileContainingSymbol(service.getName())
+                            .build());
         }
     }
 
     private void requestUnseenDependencyProtos(
+            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
             Set<ServerReflectionRequest> outstandingRequests,
             Map<String, DescriptorProtos.FileDescriptorProto> protosByFileName,
             FileDescriptorResponse response) {
@@ -126,9 +137,12 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
 
             for (String dependencyFileName : protoDescriptor.getDependencyList()) {
                 if (!protosByFileName.containsKey(dependencyFileName)) {
-                    makeRequest(outstandingRequests, ServerReflectionRequest.newBuilder()
-                            .setFileByFilename(dependencyFileName)
-                            .build());
+                    makeRequest(
+                            reqStream,
+                            outstandingRequests,
+                            ServerReflectionRequest.newBuilder()
+                                    .setFileByFilename(dependencyFileName)
+                                    .build());
                 }
             }
         }
@@ -140,7 +154,7 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         Map<String, DescriptorProtos.FileDescriptorProto> rootsByFileName = Maps.newHashMap(protosByFileName);
         for (DescriptorProtos.FileDescriptorProto proto : protosByFileName.values()) {
             for (String dependencyFileName : proto.getDependencyList()) {
-                protosByFileName.remove(dependencyFileName);
+                rootsByFileName.remove(dependencyFileName);
             }
         }
 
@@ -183,9 +197,12 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         return compiledProtosByFileName.values();
     }
 
-    private void makeRequest(Set<ServerReflectionRequest> outstandingRequests, ServerReflectionRequest request) {
+    private void makeRequest(
+            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
+            Set<ServerReflectionRequest> outstandingRequests,
+            ServerReflectionRequest request) {
         outstandingRequests.add(request);
-        reqStream.onNext(request);
+        reqStream.get().onNext(request);
     }
 
 }

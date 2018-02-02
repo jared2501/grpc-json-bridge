@@ -5,7 +5,9 @@ dependencies {
     compile 'io.grpc:grpc-netty'
     compile 'io.grpc:grpc-services'
     compile 'org.slf4j:slf4j-api'
+    compile 'com.github.ben-manes.caffeine:caffeine'
 
     testCompile project(':test-grpc-service')
     testCompile 'org.assertj:assertj-core'
+    testCompile 'org.slf4j:slf4j-simple'
 }
