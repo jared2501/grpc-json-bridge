@@ -5,15 +5,12 @@
 package com.github.jared2501.grpc.bridge;
 
 import com.github.jared2501.grpc.bridge.test.TestServiceImpl;
-import com.google.protobuf.util.JsonFormat;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
 import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -44,24 +41,32 @@ class GrpcBridgeImplIntegrationTest {
     }
 
     @Test
-    void barbaz() throws InterruptedException, ExecutionException {
-        ReflectionBasedTypeRegistrySupplier clientProvider = new ReflectionBasedTypeRegistrySupplier(
-                serviceName -> channel, 1, TimeUnit.NANOSECONDS);
-        JsonFormat.TypeRegistry typeRegistry = clientProvider.getTypeRegistry("foo").get();
-        System.out.println("types: " + typeRegistry.find("com.github.jared2501.grpc.bridge.test.TestMessage"));
-    }
-
-    @Test
     void norfquix() throws ExecutionException, InterruptedException {
-        ChannelProvider channelProvider = serviceName -> channel;
-        GrpcBridgeImpl bridge = new GrpcBridgeImpl(
-                channelProvider, new ReflectionBasedTypeRegistrySupplier(channelProvider, 1, TimeUnit.NANOSECONDS));
+        GrpcBridge bridge = new GrpcBridgeImpl(serviceName -> channel);
 
-        CompletableFuture<String> result = bridge.invoke(
+        GrpcBridge.InvocationHandle handle = bridge.invoke(
                 "foo",
                 "com.github.jared2501.grpc.bridge.test.TestService/UnaryReqUnaryResp",
-                "{\"message\": \"message\", \"empty\": {}}");
+                "{\"message\": \"message\", \"empty\": {}}",
+                new GrpcBridge.InvocationObserver() {
+                    @Override
+                    public void onResult(String jsonOutput) {
+                        System.out.println("output: " + jsonOutput);
+                    }
 
-        result.get();
+                    @Override
+                    public void onMethodNotFound() {
+                        System.out.println("method not found!");
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        error.printStackTrace();
+                    }
+                });
+
+        handle.start();
+
+        Thread.sleep(5000);
     }
 }

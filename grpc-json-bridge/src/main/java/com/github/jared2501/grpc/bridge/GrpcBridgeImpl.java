@@ -5,42 +5,48 @@
 package com.github.jared2501.grpc.bridge;
 
 import com.google.common.io.ByteStreams;
-import com.google.protobuf.Any;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.Empty;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 
 final class GrpcBridgeImpl implements GrpcBridge {
 
     private final ChannelProvider channelProvider;
-    private final TypeRegistrySupplier typeRegistrySupplier;
 
-    public GrpcBridgeImpl(ChannelProvider channelProvider, TypeRegistrySupplier typeRegistrySupplier) {
+    public GrpcBridgeImpl(ChannelProvider channelProvider) {
         this.channelProvider = channelProvider;
-        this.typeRegistrySupplier = typeRegistrySupplier;
     }
 
     @Override
-    public CompletableFuture<String> invoke(String serviceName, String fullMethodName, String jsonInput) {
-        return typeRegistrySupplier.getTypeRegistry(serviceName)
-                .thenComposeAsync(typeRegistry -> {
+    public InvocationHandle invoke(
+            String serviceName, String fullMethodName, String jsonInput, InvocationObserver observer) {
+        return new InvocationHandle() {
+            @Override
+            public void start() {
+                Channel channel = channelProvider.get(serviceName);
+                ReflectionResponseObserver reflection = new ReflectionResponseObserver(serviceName);
+                reflection.onDoneHandler(() -> {
+                    Optional<Descriptors.MethodDescriptor> maybeMethod = reflection.getAvailableMethod(fullMethodName);
+                    if (!maybeMethod.isPresent()) {
+                        observer.onMethodNotFound();
+                        return;
+                    }
+                    Descriptors.MethodDescriptor method = maybeMethod.get();
+
                     ClientCall<byte[], byte[]> call = channelProvider.get(serviceName)
                             .newCall(getMethodDescriptor(fullMethodName), CallOptions.DEFAULT);
-
-                    CompletableFuture<String> future = new CompletableFuture<>();
-
-                    // TODO: handle cancellations? maybe futures not right abstraction?
                     call.start(
                             new ClientCall.Listener<byte[]>() {
                                 @Override
@@ -52,25 +58,27 @@ final class GrpcBridgeImpl implements GrpcBridge {
                                 public void onMessage(byte[] messageBytes) {
                                     DynamicMessage message;
                                     try {
-                                        message = DynamicMessage.parseFrom(typeRegistry.find(
-                                                "com.github.jared2501.grpc.bridge.test.TestMessage"),
-                                                messageBytes);
+                                        message = DynamicMessage.parseFrom(method.getOutputType(), messageBytes);
                                     } catch (InvalidProtocolBufferException e) {
-                                        e.printStackTrace();
+                                        observer.onError(new RuntimeException(
+                                                "InvalidProtocolBufferException encountered when parsing message", e));
                                         return;
                                     }
 
                                     try {
-                                        JsonFormat.printer().usingTypeRegistry(typeRegistry).appendTo(message, System.out);
+                                        JsonFormat.printer()
+                                                .usingTypeRegistry(reflection.getTypeRegistry())
+                                                .appendTo(message, System.out);
                                     } catch (IOException e) {
-                                        e.printStackTrace();
-                                        return;
+                                        observer.onError(new RuntimeException(
+                                                "IOException encountered when printing response", e));
                                     }
                                 }
 
                                 @Override
                                 public void onClose(Status status, Metadata trailers) {
                                     System.out.println("closed! " + status);
+                                    reflection.cancel();
                                 }
 
                                 @Override
@@ -79,23 +87,28 @@ final class GrpcBridgeImpl implements GrpcBridge {
                             },
                             new Metadata());
 
-                    DynamicMessage.Builder message = DynamicMessage.newBuilder(
-                            typeRegistry.find("com.github.jared2501.grpc.bridge.test.TestMessage"));
-                    JsonFormat.Parser parser = JsonFormat.parser().usingTypeRegistry(typeRegistry);
+                    DynamicMessage.Builder message = DynamicMessage.newBuilder(method.getInputType());
+                    JsonFormat.Parser parser = JsonFormat.parser().usingTypeRegistry(reflection.getTypeRegistry());
                     try {
                         parser.merge(jsonInput, message);
                     } catch (InvalidProtocolBufferException e) {
-                        future.obtrudeException(new RuntimeException(
+                        observer.onError(new RuntimeException(
                                 "InvalidProtocolBufferException encountered when converting JSON to proto", e));
-                        return future;
+                        return;
                     }
 
                     call.sendMessage(message.build().toByteArray());
                     call.halfClose();
                     call.request(2);
-
-                    return future;
                 });
+                reflection.start(ServerReflectionGrpc.newStub(channel));
+            }
+
+            @Override
+            public void cancel() {
+                // TODO(jnewman): implement!
+            }
+        };
     }
 
     private MethodDescriptor<byte[], byte[]> getMethodDescriptor(String fullMethodName) {
