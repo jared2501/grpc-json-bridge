@@ -4,12 +4,17 @@
 
 package com.github.jared2501.grpc.bridge;
 
+import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.TreeTraverser;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.DescriptorProtos;
-import com.google.protobuf.Descriptors;
+import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import com.google.protobuf.Descriptors.DescriptorValidationException;
+import com.google.protobuf.Descriptors.FileDescriptor;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.reflection.v1alpha.FileDescriptorResponse;
@@ -22,29 +27,50 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class GrpcReflectionClientImpl implements GrpcReflectionClient {
+/**
+ * A {@link TypeRegistrySupplier} that uses the {@link ServerReflectionGrpc ServerReflectionGrpc service} to build a
+ * {@link com.google.protobuf.util.JsonFormat.TypeRegistry} of types that are required to communicate with a specified
+ * service.
+ * <p>
+ * TypeRegistries that are built will be cached for a specified period of time.
+ */
+public class ReflectionBasedTypeRegistrySupplier implements TypeRegistrySupplier {
 
-    private static final Logger log = LoggerFactory.getLogger(GrpcReflectionClientImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(ReflectionBasedTypeRegistrySupplier.class);
 
-    private final String serviceName;
-    private final ServerReflectionGrpc.ServerReflectionStub reflection;
+    private final AsyncLoadingCache<String, JsonFormat.TypeRegistry> typeRegistries;
 
-    public GrpcReflectionClientImpl(String serviceName, ServerReflectionGrpc.ServerReflectionStub reflection) {
-        this.serviceName = serviceName;
-        this.reflection = reflection;
+    public ReflectionBasedTypeRegistrySupplier(ServerReflectionStubProvider stubProvider, Duration cacheDuration) {
+        this.typeRegistries = Caffeine.newBuilder()
+                .expireAfterWrite(cacheDuration.getNanos(), TimeUnit.NANOSECONDS)
+                .buildAsync(new AsyncCacheLoader<String, JsonFormat.TypeRegistry>() {
+                    @Nonnull
+                    @Override
+                    public CompletableFuture<JsonFormat.TypeRegistry> asyncLoad(String serviceName, Executor executor) {
+                        return getTypeRegistry(serviceName, stubProvider.get(serviceName));
+                    }
+                });
     }
 
     @Override
-    public CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry() {
+    public CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry(String serviceName) {
+        return typeRegistries.get(serviceName);
+    }
+
+    private static CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry(
+            String serviceName, ServerReflectionGrpc.ServerReflectionStub reflection) {
         CompletableFuture<JsonFormat.TypeRegistry> result = new CompletableFuture<>();
 
         Set<ServerReflectionRequest> outstandingRequests = Sets.newHashSet();
-        Map<String, DescriptorProtos.FileDescriptorProto> protosByFileName = Maps.newHashMap();
+        Map<String, FileDescriptorProto> protosByFileName = Maps.newHashMap();
 
         AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream = new AtomicReference<>();
         reqStream.set(reflection.serverReflectionInfo(
@@ -60,11 +86,11 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
 
                         switch (response.getMessageResponseCase()) {
                             case LIST_SERVICES_RESPONSE:
-                                requestAllFilesForServices(reqStream, outstandingRequests, response);
+                                requestAllFilesForServices(reqStream.get(), outstandingRequests, response);
                                 break;
                             case FILE_DESCRIPTOR_RESPONSE:
                                 requestUnseenDependencyProtos(
-                                        reqStream,
+                                        reqStream.get(),
                                         outstandingRequests,
                                         protosByFileName,
                                         response.getFileDescriptorResponse());
@@ -75,9 +101,9 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
                         }
 
                         if (outstandingRequests.isEmpty()) {
-                            Collection<Descriptors.FileDescriptor> compiledProtos = compileProtos(protosByFileName);
+                            Collection<FileDescriptor> compiledProtos = compileProtos(protosByFileName);
                             JsonFormat.TypeRegistry.Builder typeRegistry = JsonFormat.TypeRegistry.newBuilder();
-                            for (Descriptors.FileDescriptor compiledProto : compiledProtos) {
+                            for (FileDescriptor compiledProto : compiledProtos) {
                                 typeRegistry.add(compiledProto.getMessageTypes());
                             }
                             result.complete(typeRegistry.build());
@@ -105,8 +131,8 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         return result;
     }
 
-    private void requestAllFilesForServices(
-            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
+    private static void requestAllFilesForServices(
+            StreamObserver<ServerReflectionRequest> reqStream,
             Set<ServerReflectionRequest> outstandingRequests,
             ServerReflectionResponse response) {
         for (ServiceResponse service : response.getListServicesResponse().getServiceList()) {
@@ -119,15 +145,15 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         }
     }
 
-    private void requestUnseenDependencyProtos(
-            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
+    private static void requestUnseenDependencyProtos(
+            StreamObserver<ServerReflectionRequest> reqStream,
             Set<ServerReflectionRequest> outstandingRequests,
-            Map<String, DescriptorProtos.FileDescriptorProto> protosByFileName,
+            Map<String, FileDescriptorProto> protosByFileName,
             FileDescriptorResponse response) {
         for (ByteString protoBytes : response.getFileDescriptorProtoList()) {
-            DescriptorProtos.FileDescriptorProto protoDescriptor;
+            FileDescriptorProto protoDescriptor;
             try {
-                protoDescriptor = DescriptorProtos.FileDescriptorProto.parseFrom(protoBytes);
+                protoDescriptor = FileDescriptorProto.parseFrom(protoBytes);
             } catch (InvalidProtocolBufferException e) {
                 log.warn("InvalidProtocolBufferException when parsing proto bytes... skipping", e);
                 continue;
@@ -148,25 +174,24 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         }
     }
 
-    private Collection<Descriptors.FileDescriptor> compileProtos(
-            Map<String, DescriptorProtos.FileDescriptorProto> protosByFileName) {
+    private static Collection<FileDescriptor> compileProtos(Map<String, FileDescriptorProto> protosByFileName) {
         // Find all "roots", where a root is a proto file for which another proto file does not depend on it
-        Map<String, DescriptorProtos.FileDescriptorProto> rootsByFileName = Maps.newHashMap(protosByFileName);
-        for (DescriptorProtos.FileDescriptorProto proto : protosByFileName.values()) {
+        Map<String, FileDescriptorProto> rootsByFileName = Maps.newHashMap(protosByFileName);
+        for (FileDescriptorProto proto : protosByFileName.values()) {
             for (String dependencyFileName : proto.getDependencyList()) {
                 rootsByFileName.remove(dependencyFileName);
             }
         }
 
-        Map<String, Descriptors.FileDescriptor> compiledProtosByFileName = Maps.newHashMap();
+        Map<String, FileDescriptor> compiledProtosByFileName = Maps.newHashMap();
 
         // Perform a postorder traversal (i.e. visit children first) from every root, compiling and storing the proto
         // file if it has not already been compiled
-        TreeTraverser<DescriptorProtos.FileDescriptorProto> treeTraverser =
-                new TreeTraverser<DescriptorProtos.FileDescriptorProto>() {
+        TreeTraverser<FileDescriptorProto> treeTraverser =
+                new TreeTraverser<FileDescriptorProto>() {
                     @Override
-                    public Iterable<DescriptorProtos.FileDescriptorProto> children(
-                            DescriptorProtos.FileDescriptorProto root) {
+                    public Iterable<FileDescriptorProto> children(
+                            FileDescriptorProto root) {
                         return root.getDependencyList()
                                 .stream()
                                 // Note: skip visiting dependencies if they have already been compiled
@@ -175,17 +200,17 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
                                 .collect(Collectors.toSet());
                     }
                 };
-        for (DescriptorProtos.FileDescriptorProto root : rootsByFileName.values()) {
-            for (DescriptorProtos.FileDescriptorProto proto : treeTraverser.postOrderTraversal(root)) {
-                Descriptors.FileDescriptor[] dependencies = proto.getDependencyList()
+        for (FileDescriptorProto root : rootsByFileName.values()) {
+            for (FileDescriptorProto proto : treeTraverser.postOrderTraversal(root)) {
+                FileDescriptor[] dependencies = proto.getDependencyList()
                         .stream()
                         .map(compiledProtosByFileName::get)
-                        .toArray(Descriptors.FileDescriptor[]::new);
+                        .toArray(FileDescriptor[]::new);
 
-                Descriptors.FileDescriptor compiledProto;
+                FileDescriptor compiledProto;
                 try {
-                    compiledProto = Descriptors.FileDescriptor.buildFrom(proto, dependencies);
-                } catch (Descriptors.DescriptorValidationException e) {
+                    compiledProto = FileDescriptor.buildFrom(proto, dependencies);
+                } catch (DescriptorValidationException e) {
                     log.warn("Exception encountered when building proto... skipping", e);
                     continue;
                 }
@@ -197,12 +222,12 @@ public class GrpcReflectionClientImpl implements GrpcReflectionClient {
         return compiledProtosByFileName.values();
     }
 
-    private void makeRequest(
-            AtomicReference<StreamObserver<ServerReflectionRequest>> reqStream,
+    private static void makeRequest(
+            StreamObserver<ServerReflectionRequest> reqStream,
             Set<ServerReflectionRequest> outstandingRequests,
             ServerReflectionRequest request) {
         outstandingRequests.add(request);
-        reqStream.get().onNext(request);
+        reqStream.onNext(request);
     }
 
 }

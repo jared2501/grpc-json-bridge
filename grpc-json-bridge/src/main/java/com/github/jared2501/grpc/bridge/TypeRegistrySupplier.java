@@ -7,12 +7,8 @@ package com.github.jared2501.grpc.bridge;
 import com.google.protobuf.util.JsonFormat;
 import java.util.concurrent.CompletableFuture;
 
-public interface GrpcReflectionClient {
+interface TypeRegistrySupplier {
 
-    interface Provider {
-        GrpcReflectionClient get(String serviceName);
-    }
-
-    CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry();
+    CompletableFuture<JsonFormat.TypeRegistry> getTypeRegistry(String serviceName);
 
 }

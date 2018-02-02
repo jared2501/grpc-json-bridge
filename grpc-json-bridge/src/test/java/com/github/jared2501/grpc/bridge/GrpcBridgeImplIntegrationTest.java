@@ -13,8 +13,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
-import io.grpc.reflection.v1alpha.ServerReflectionRequest;
-import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -45,13 +43,12 @@ class GrpcBridgeImplIntegrationTest {
         server.awaitTermination();
     }
 
-    StreamObserver<ServerReflectionRequest> reqStream;
-
     @Test
     void barbaz() throws InterruptedException, Descriptors.DescriptorValidationException, ExecutionException {
-        GrpcReflectionClientImpl client = new GrpcReflectionClientImpl("foo", ServerReflectionGrpc.newStub(channel));
-        JsonFormat.TypeRegistry typeRegistry = client.getTypeRegistry().get();
-        System.out.println("types: " + typeRegistry.find("com.github.jared2501.grpc.bridge.test.TestService"));
+        ReflectionBasedTypeRegistrySupplier clientProvider = new ReflectionBasedTypeRegistrySupplier(
+                serviceName -> ServerReflectionGrpc.newStub(channel));
+        JsonFormat.TypeRegistry typeRegistry = clientProvider.getTypeRegistry("foo").get();
+        System.out.println("types: " + typeRegistry.find("com.github.jared2501.grpc.bridge.test.TestMessage"));
     }
 
 }
