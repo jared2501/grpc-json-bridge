@@ -2,11 +2,14 @@ syntax = "proto3";
 
 package com.github.jared2501.grpc.bridge.test;
 
+import "transitive.proto";
+
 option java_package = "com.github.jared2501.grpc.bridge.test";
 option java_multiple_files = true;
 
 message TestMessage {
     string message = 1;
+    TransitiveEmpty empty = 2; // Tests transitive imports
 }
 
 // A simple test service that will echo a TestMessage.

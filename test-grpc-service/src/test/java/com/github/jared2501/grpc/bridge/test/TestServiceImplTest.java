@@ -24,7 +24,7 @@ class TestServiceImplTest {
     @BeforeEach
     void before() {
         MockitoAnnotations.initMocks(this);
-        testService = new TestServiceImpl();
+        testService = TestServiceImpl.INSTANCE;
     }
 
     @Test

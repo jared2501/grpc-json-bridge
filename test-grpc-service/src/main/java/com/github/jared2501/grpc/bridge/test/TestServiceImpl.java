@@ -7,6 +7,11 @@ package com.github.jared2501.grpc.bridge.test;
 import io.grpc.stub.StreamObserver;
 
 public final class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
+
+    public static final TestServiceImpl INSTANCE = new TestServiceImpl();
+
+    private TestServiceImpl() {}
+
     @Override
     public void unaryReqUnaryResp(TestMessage request, StreamObserver<TestMessage> responseObserver) {
         responseObserver.onNext(request);

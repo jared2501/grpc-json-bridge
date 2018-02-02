@@ -4,6 +4,7 @@ apply from: rootProject.file('gradle/junit5.gradle')
 dependencies {
     compile 'io.grpc:grpc-netty'
     compile 'io.grpc:grpc-services'
+    compile 'org.slf4j:slf4j-api'
 
     testCompile project(':test-grpc-service')
     testCompile 'org.assertj:assertj-core'
