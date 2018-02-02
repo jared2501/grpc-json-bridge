@@ -14,7 +14,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Descriptors.FileDescriptor;
-import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.reflection.v1alpha.FileDescriptorResponse;
@@ -42,20 +41,22 @@ import org.slf4j.LoggerFactory;
  * <p>
  * TypeRegistries that are built will be cached for a specified period of time.
  */
-public class ReflectionBasedTypeRegistrySupplier implements TypeRegistrySupplier {
+class ReflectionBasedTypeRegistrySupplier implements TypeRegistrySupplier {
 
     private static final Logger log = LoggerFactory.getLogger(ReflectionBasedTypeRegistrySupplier.class);
 
     private final AsyncLoadingCache<String, JsonFormat.TypeRegistry> typeRegistries;
 
-    public ReflectionBasedTypeRegistrySupplier(ServerReflectionStubProvider stubProvider, Duration cacheDuration) {
+    ReflectionBasedTypeRegistrySupplier(
+            ChannelProvider stubProvider, long expiryDuration, TimeUnit expiryTimeUnit) {
         this.typeRegistries = Caffeine.newBuilder()
-                .expireAfterWrite(cacheDuration.getNanos(), TimeUnit.NANOSECONDS)
+                .expireAfterWrite(expiryDuration, expiryTimeUnit)
                 .buildAsync(new AsyncCacheLoader<String, JsonFormat.TypeRegistry>() {
                     @Nonnull
                     @Override
                     public CompletableFuture<JsonFormat.TypeRegistry> asyncLoad(String serviceName, Executor executor) {
-                        return getTypeRegistry(serviceName, stubProvider.get(serviceName));
+                        return getTypeRegistry(
+                                serviceName, ServerReflectionGrpc.newStub(stubProvider.get(serviceName)));
                     }
                 });
     }
