@@ -45,8 +45,8 @@ final class GrpcBridgeImpl implements GrpcBridge {
                     }
                     Descriptors.MethodDescriptor method = maybeMethod.get();
 
-                    ClientCall<byte[], byte[]> call = channelProvider.get(serviceName)
-                            .newCall(getMethodDescriptor(fullMethodName), CallOptions.DEFAULT);
+                    ClientCall<byte[], byte[]> call = channel.newCall(
+                            getMethodDescriptor(fullMethodName), CallOptions.DEFAULT);
                     call.start(
                             new ClientCall.Listener<byte[]>() {
                                 @Override

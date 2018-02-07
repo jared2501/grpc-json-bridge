@@ -105,7 +105,6 @@ class ReflectionResponseObserver implements StreamObserver<ServerReflectionRespo
 
         if (outstandingRequests.isEmpty()) {
             JsonFormat.TypeRegistry.Builder typeRegistryBuilder = JsonFormat.TypeRegistry.newBuilder();
-
             Collection<FileDescriptor> compiledProtos = compileProtos(protosByFileName);
             for (FileDescriptor compiledProto : compiledProtos) {
                 typeRegistryBuilder.add(compiledProto.getMessageTypes());
@@ -118,9 +117,7 @@ class ReflectionResponseObserver implements StreamObserver<ServerReflectionRespo
                     }
                 }
             }
-
             typeRegistry = typeRegistryBuilder.build();
-
             onDoneHandler.run();
         }
     }
@@ -199,8 +196,7 @@ class ReflectionResponseObserver implements StreamObserver<ServerReflectionRespo
         // file if it has not already been compiled
         TreeTraverser<FileDescriptorProto> treeTraverser = new TreeTraverser<FileDescriptorProto>() {
             @Override
-            public Iterable<FileDescriptorProto> children(
-                    FileDescriptorProto root) {
+            public Iterable<FileDescriptorProto> children(FileDescriptorProto root) {
                 return root.getDependencyList()
                         .stream()
                         // Note: skip visiting dependencies if they have already been compiled
