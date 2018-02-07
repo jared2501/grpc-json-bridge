@@ -1,6 +1,6 @@
 # gRPC/JSON Bridge
 
-A simple service that uses the [gRPC ServerReflection service](https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto) to dynamically translate HTTP JSON requests into unary gRPC requests, that must have unary responses (streaming capabilities "coming soon").
+A simple service that uses the [gRPC ServerReflection service](https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto) to dynamically translate HTTP JSON requests into unary gRPC requests using the [canonical JSON format](https://developers.google.com/protocol-buffers/docs/proto3#json) for Protocol Buffers. Currently, only methods that have unary requests and return unary responses are supported.
 
 For example, given a service that implements the following gRPC service:
 
@@ -10,6 +10,7 @@ syntax = "proto3";
 package com.github.jared2501.foo;
 
 service ExampleService {
+    // An example method that takes a comma-separated list of numbers and returns the array
     rpc ExampleMethod (TestMessage) returns (TestMessage);
 }
 
@@ -22,11 +23,11 @@ message MyResponse {
 }
 ```
 
-A curl request to the gRPC/JSON bridge such as:
+A curl request to the gRPC/JSON bridge such as the following:
 
 ```bash
 curl -k -H 'Content-Type: application/json' \
-  -d '{"message": "say 1,2,3"}' \
+  -d '{"message": "1,2,3"}' \
   http://grpc-json-bridge.local:8014/example/com.github.jared2501.foo.ExampleService/ExampleMethod
 ```
 
@@ -36,7 +37,7 @@ Would yield a response of:
 {"array": [1, 2, 3]}
 ```
 
-Note that the URL requested above follows the pattern:
+The URL requested above follows the pattern:
 
 ```
 http://${host}:${port}/${service-name}/${package}.{ServiceName}/${MethodName}
@@ -63,9 +64,10 @@ This repository offers a simple, quick solution that does not require changing y
 
 ## How To Build/Run
 
-For development purposes the server can be run by running:
+For development purposes, the server can be run by running:
 
 ```bash
+./gradlew idea
 ./gradlew grpc-json-bridge-server:run
 ```
 
