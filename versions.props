@@ -1,5 +1,6 @@
 com.github.ben-manes.caffeine:caffeine = 2.6.1
 com.google.protobuf:* = 3.5.0
+io.dropwizard:* = 1.2.3
 io.grpc:* = 1.7.1
 org.apiguardian:apiguardian-api = 1.0.0
 org.assertj:assertj-core = 3.6.2
