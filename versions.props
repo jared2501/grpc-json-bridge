@@ -4,6 +4,7 @@ io.dropwizard:* = 1.2.3
 io.grpc:* = 1.7.1
 org.apiguardian:apiguardian-api = 1.0.0
 org.assertj:assertj-core = 3.6.2
+org.immutables:* = 2.5.6
 org.junit.jupiter:* = 5.0.2
 org.mockito:* = 2.13.0
 org.slf4j:* = 1.7.25

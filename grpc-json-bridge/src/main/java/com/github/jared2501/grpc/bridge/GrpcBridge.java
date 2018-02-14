@@ -4,16 +4,25 @@
 
 package com.github.jared2501.grpc.bridge;
 
+import javax.annotation.Nullable;
+
 public interface GrpcBridge {
     interface InvocationHandle {
         void start();
         void cancel();
     }
 
+    enum InvocationErrorType {
+        SERVICE_NOT_FOUND,
+        SERVICE_UNAVAILABLE,
+        METHOD_NOT_FOUND,
+        NON_UNARY_RESPONSE,
+        UNKNOWN
+    }
+
     interface InvocationObserver {
+        void onError(InvocationErrorType type, @Nullable Throwable error);
         void onResult(String jsonOutput);
-        void onMethodNotFound();
-        void onError(Throwable error);
     }
 
     /**
