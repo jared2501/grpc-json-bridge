@@ -31,34 +31,28 @@ class ServiceIndexImpl implements ServiceIndex {
     private boolean isComplete = false;
 
 
-    @Override
     public void restart() {
         availableServices.clear();
         protosByFileName.clear();
     }
 
-    @Override
     public void addAvailableService(String serviceName) {
         availableServices.add(serviceName);
     }
 
-    @Override
     public void addProto(String fileName, FileDescriptorProto proto) {
         protosByFileName.put(fileName, proto);
     }
 
-    @Override
     public void complete() {
         isComplete = true;
         buildIndex(availableServices, compileProtos(protosByFileName));
     }
 
-    @Override
     public boolean isAvailable() {
         return isComplete;
     }
 
-    @Override
     public boolean containsProto(String fileName) {
         return protosByFileName.containsKey(fileName);
     }
@@ -124,12 +118,14 @@ class ServiceIndexImpl implements ServiceIndex {
                 if (availableServices.contains(service.getFullName())) {
                     for (Descriptors.MethodDescriptor method : service.getMethods()) {
                         String methodFullName = String.format("%s/%s", service.getFullName(), method.getName());
-                        availableMethodsByFullMethodName.put(methodFullName, method);
+                        availableMethodsByFullMethodName.put(methodFullName, AvailableMethod.builder()
+                                .methodDescriptor(method)
+                                .typeRegistry(null) // TODO this??
+                                .build());
                     }
                 }
             }
         }
-        typeRegistry = typeRegistryBuilder.build();
     }
 
 }

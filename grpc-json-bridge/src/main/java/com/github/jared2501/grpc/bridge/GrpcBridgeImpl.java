@@ -6,32 +6,21 @@ package com.github.jared2501.grpc.bridge;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.common.io.ByteStreams;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
-import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.reflection.v1alpha.FileDescriptorResponse;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
-import io.grpc.reflection.v1alpha.ServerReflectionRequest;
-import io.grpc.reflection.v1alpha.ServerReflectionResponse;
-import io.grpc.reflection.v1alpha.ServiceResponse;
-import io.grpc.stub.StreamObserver;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -190,9 +179,6 @@ final class GrpcBridgeImpl implements GrpcBridge {
 
     private void updateService(String serverName, Channel channel, ServiceIndex index) {
         // TODO handle failure case
-        ReflectionResponseObserver observer = new ReflectionResponseObserver(serverName, index, () -> {
-        });
-        observer.start(ServerReflectionGrpc.newStub(channel));
     }
 
     private static MethodDescriptor<byte[], byte[]> getMethodDescriptor(String fullMethodName) {
@@ -219,129 +205,6 @@ final class GrpcBridgeImpl implements GrpcBridge {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        }
-    }
-
-    private static class ReflectionResponseObserver implements StreamObserver<ServerReflectionResponse> {
-
-        private final String serviceName;
-        private final ServiceIndex index;
-        private final Runnable onErrorHandler;
-        private final Set<ServerReflectionRequest> outstandingRequests = Sets.newHashSet();
-
-        private StreamObserver<ServerReflectionRequest> reqStream;
-        private Context.CancellableContext context;
-
-        ReflectionResponseObserver(String serviceName, ServiceIndex index, Runnable onErrorHandler) {
-            this.serviceName = serviceName;
-            this.index = index;
-            this.onErrorHandler = onErrorHandler;
-        }
-
-        public void start(ServerReflectionGrpc.ServerReflectionStub serverReflection) {
-            context = Context.CancellableContext.current().withCancellation();
-            context.run(() -> reqStream = serverReflection.serverReflectionInfo(this));
-            reqStream.onNext(ServerReflectionRequest.newBuilder()
-                    .setListServices("true")
-                    .build());
-        }
-
-        public void cancel() {
-            context.cancel(new RuntimeException());
-        }
-
-        @Override
-        public void onNext(ServerReflectionResponse response) {
-            if (context.isCancelled()) {
-                log.info("Future cancelled, not proceeding...");
-                return;
-            }
-
-            outstandingRequests.remove(response.getOriginalRequest());
-
-            switch (response.getMessageResponseCase()) {
-                case LIST_SERVICES_RESPONSE:
-                    requestAllFilesForServices(reqStream, outstandingRequests, response);
-                    break;
-                case FILE_DESCRIPTOR_RESPONSE:
-                    requestUnseenDependencyProtos(
-                            reqStream,
-                            outstandingRequests,
-                            response.getFileDescriptorResponse());
-                    break;
-                default:
-                    log.error("Unexpected response case: {}", response.getMessageResponseCase());
-                    break;
-            }
-
-            if (outstandingRequests.isEmpty()) {
-                index.complete();
-            }
-        }
-
-        @Override
-        public void onError(Throwable error) {
-            log.error(
-                    "Throwable encountered when streaming handling reflecting for service {}",
-                    serviceName, error);
-            onErrorHandler.run();
-        }
-
-        @Override
-        public void onCompleted() {
-            log.info("Reflection complete, service {} likely shutting down.", serviceName);
-            onErrorHandler.run();
-        }
-
-        private void requestAllFilesForServices(
-                StreamObserver<ServerReflectionRequest> reqStream,
-                Set<ServerReflectionRequest> outstandingRequests,
-                ServerReflectionResponse response) {
-            for (ServiceResponse service : response.getListServicesResponse().getServiceList()) {
-                index.addAvailableService(service.getName());
-                makeRequest(
-                        reqStream,
-                        outstandingRequests,
-                        ServerReflectionRequest.newBuilder()
-                                .setFileContainingSymbol(service.getName())
-                                .build());
-            }
-        }
-
-        private void requestUnseenDependencyProtos(
-                StreamObserver<ServerReflectionRequest> reqStream,
-                Set<ServerReflectionRequest> outstandingRequests,
-                FileDescriptorResponse response) {
-            for (ByteString protoBytes : response.getFileDescriptorProtoList()) {
-                DescriptorProtos.FileDescriptorProto protoDescriptor;
-                try {
-                    protoDescriptor = DescriptorProtos.FileDescriptorProto.parseFrom(protoBytes);
-                } catch (InvalidProtocolBufferException e) {
-                    log.warn("InvalidProtocolBufferException when parsing proto bytes... skipping", e);
-                    continue;
-                }
-
-                index.addProto(protoDescriptor.getName(), protoDescriptor);
-
-                for (String dependencyFileName : protoDescriptor.getDependencyList()) {
-                    if (!index.containsProto(dependencyFileName)) {
-                        makeRequest(
-                                reqStream,
-                                outstandingRequests,
-                                ServerReflectionRequest.newBuilder()
-                                        .setFileByFilename(dependencyFileName)
-                                        .build());
-                    }
-                }
-            }
-        }
-
-        private static void makeRequest(
-                StreamObserver<ServerReflectionRequest> reqStream,
-                Set<ServerReflectionRequest> outstandingRequests,
-                ServerReflectionRequest request) {
-            outstandingRequests.add(request);
-            reqStream.onNext(request);
         }
     }
 

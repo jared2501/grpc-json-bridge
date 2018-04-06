@@ -42,31 +42,31 @@ class GrpcBridgeImplIntegrationTest {
 
     @Test
     void norfquix() throws ExecutionException, InterruptedException {
-        GrpcBridge bridge = new GrpcBridgeImpl(serviceName -> channel);
-
-        GrpcBridge.InvocationHandle handle = bridge.invoke(
-                "foo",
-                "com.github.jared2501.grpc.bridge.test.TestService/UnaryReqUnaryResp",
-                "{\"message\": \"message\", \"empty\": {}}",
-                new GrpcBridge.InvocationObserver() {
-                    @Override
-                    public void onResult(String jsonOutput) {
-                        System.out.println("output: " + jsonOutput);
-                    }
-
-                    @Override
-                    public void onMethodNotFound() {
-                        System.out.println("method not found!");
-                    }
-
-                    @Override
-                    public void onError(Throwable error) {
-                        error.printStackTrace();
-                    }
-                });
-
-        handle.start();
-
-        Thread.sleep(5000);
+        //        GrpcBridge bridge = new GrpcBridgeImpl(serviceName -> channel);
+        //
+        //        GrpcBridge.InvocationHandle handle = bridge.invoke(
+        //                "foo",
+        //                "com.github.jared2501.grpc.bridge.test.TestService/UnaryReqUnaryResp",
+        //                "{\"message\": \"message\", \"empty\": {}}",
+        //                new GrpcBridge.InvocationObserver() {
+        //                    @Override
+        //                    public void onResult(String jsonOutput) {
+        //                        System.out.println("output: " + jsonOutput);
+        //                    }
+        //
+        //                    @Override
+        //                    public void onMethodNotFound() {
+        //                        System.out.println("method not found!");
+        //                    }
+        //
+        //                    @Override
+        //                    public void onError(Throwable error) {
+        //                        error.printStackTrace();
+        //                    }
+        //                });
+        //
+        //        handle.start();
+        //
+        //        Thread.sleep(5000);
     }
 }
