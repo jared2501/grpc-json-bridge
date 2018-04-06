@@ -28,13 +28,8 @@ final class GrpcBridgeImpl implements GrpcBridge {
 
     private static final Logger log = LoggerFactory.getLogger(GrpcBridgeImpl.class);
 
-    private final ServiceIndex.Provider serviceIndexFactory;
     private final Map<String, Channel> serviceChannels = Maps.newConcurrentMap();
     private final Map<String, ServiceIndex> serviceIndices = Maps.newConcurrentMap();
-
-    GrpcBridgeImpl(ServiceIndex.Provider serviceIndexFactory) {
-        this.serviceIndexFactory = serviceIndexFactory;
-    }
 
     @Override
     public InvocationHandle invoke(
@@ -170,9 +165,9 @@ final class GrpcBridgeImpl implements GrpcBridge {
         serviceChannels.putAll(newServices);
         for (Map.Entry<String, Channel> newServer : newServices.entrySet()) {
             if (!serviceIndices.containsKey(newServer.getKey())) {
-                ServiceIndex index = serviceIndexFactory.create();
-                serviceIndices.put(newServer.getKey(), index);
-                updateService(newServer.getKey(), newServer.getValue(), index);
+                //                ServiceIndex index = serviceIndexFactory.create();
+                //                serviceIndices.put(newServer.getKey(), index);
+                //                updateService(newServer.getKey(), newServer.getValue(), index);
             }
         }
     }

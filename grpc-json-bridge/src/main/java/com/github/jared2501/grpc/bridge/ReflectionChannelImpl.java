@@ -11,7 +11,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.reflection.v1alpha.FileDescriptorResponse;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc.ServerReflectionStub;
+import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
 import io.grpc.reflection.v1alpha.ServerReflectionRequest;
 import io.grpc.reflection.v1alpha.ServerReflectionResponse;
 import io.grpc.reflection.v1alpha.ServiceResponse;
@@ -26,11 +26,11 @@ public final class ReflectionChannelImpl implements ReflectionChannel {
 
     @Override
     public ReflectionCall startCall(
-            String serviceName, ServerReflectionStub serverReflection, ReflectionObserver observer) {
+            String serviceName, ServerReflectionGrpc.ServerReflectionStub reflectionStub, ReflectionObserver observer) {
         Context.CancellableContext context = Context.CancellableContext.current().withCancellation();
         context.run(() -> {
             ReflectionResponseObserver streamObs = new ReflectionResponseObserver(serviceName, observer);
-            StreamObserver<ServerReflectionRequest> reqStream = serverReflection.serverReflectionInfo(streamObs);
+            StreamObserver<ServerReflectionRequest> reqStream = reflectionStub.serverReflectionInfo(streamObs);
             streamObs.start(reqStream);
         });
         return context::cancel;

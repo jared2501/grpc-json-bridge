@@ -4,14 +4,11 @@
 
 package com.github.jared2501.grpc.bridge;
 
+import com.google.protobuf.Descriptors;
 import java.util.Optional;
 
 public interface ServiceIndex {
 
-    interface Provider {
-        ServiceIndex create();
-    }
-
-    Optional<AvailableMethod> getMethod(String fullMethodName);
+    Optional<Descriptors.MethodDescriptor> getMethod(String fullMethodName);
 
 }
