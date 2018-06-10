@@ -24,9 +24,16 @@ public final class ReflectionChannelImpl implements ReflectionChannel {
 
     private static final Logger log = LoggerFactory.getLogger(ReflectionChannelImpl.class);
 
+    private final ServerReflectionGrpc.ServerReflectionStub reflectionStub;
+    private final String serviceName;
+
+    public ReflectionChannelImpl(ServerReflectionGrpc.ServerReflectionStub reflectionStub, String serviceName) {
+        this.reflectionStub = reflectionStub;
+        this.serviceName = serviceName;
+    }
+
     @Override
-    public ReflectionCall startCall(
-            String serviceName, ServerReflectionGrpc.ServerReflectionStub reflectionStub, ReflectionObserver observer) {
+    public ReflectionCall startCall(ReflectionObserver observer) {
         Context.CancellableContext context = Context.CancellableContext.current().withCancellation();
         context.run(() -> {
             ReflectionResponseObserver streamObs = new ReflectionResponseObserver(serviceName, observer);

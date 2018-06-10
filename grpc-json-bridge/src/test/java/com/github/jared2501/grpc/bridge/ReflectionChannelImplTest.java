@@ -35,7 +35,7 @@ class ReflectionChannelImplTest {
                 .build()
                 .start();
         channel = InProcessChannelBuilder.forName("test").build();
-        reflection = new ReflectionChannelImpl();
+        reflection = new ReflectionChannelImpl(ServerReflectionGrpc.newStub(channel), "test");
     }
 
     @AfterEach
@@ -49,7 +49,7 @@ class ReflectionChannelImplTest {
     @Test
     void successfulRoundTrip() {
         TestReflectionObserver observer = new TestReflectionObserver();
-        reflection.startCall("test", ServerReflectionGrpc.newStub(channel), observer);
+        reflection.startCall(observer);
 
         observer.waitUntilComplete();
         assertThat(observer.getError()).isNull();
@@ -68,7 +68,7 @@ class ReflectionChannelImplTest {
         channel.shutdown();
         channel.awaitTermination(5, TimeUnit.HOURS);
         TestReflectionObserver observer = new TestReflectionObserver();
-        reflection.startCall("test", ServerReflectionGrpc.newStub(channel), observer);
+        reflection.startCall(observer);
         observer.waitUntilComplete();
         assertThat(observer.getError())
                 .isInstanceOf(StatusRuntimeException.class)

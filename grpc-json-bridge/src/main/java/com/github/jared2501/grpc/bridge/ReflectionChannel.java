@@ -5,7 +5,6 @@
 package com.github.jared2501.grpc.bridge;
 
 import com.google.protobuf.DescriptorProtos;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
 
 public interface ReflectionChannel {
     interface ReflectionObserver {
@@ -36,6 +35,5 @@ public interface ReflectionChannel {
         void cancel(Throwable reason);
     }
 
-    ReflectionCall startCall(
-            String serviceName, ServerReflectionGrpc.ServerReflectionStub reflectionStub, ReflectionObserver observer);
+    ReflectionCall startCall(ReflectionObserver observer);
 }
